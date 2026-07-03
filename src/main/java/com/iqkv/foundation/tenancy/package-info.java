@@ -14,19 +14,4 @@
  * limitations under the License.
  */
 
-package com.iqkv.foundation.audit.model.enums;
-
-/**
- * Defines standard entity types for auditing.
- */
-public enum EntityType {
-  USER,
-  TENANT,
-  MEMBERSHIP,
-  INVITATION,
-  INVOICE,
-  SUBSCRIPTION,
-  SETTING,
-  PERMISSION,
-  ROLE
-}
+package com.iqkv.foundation.tenancy;

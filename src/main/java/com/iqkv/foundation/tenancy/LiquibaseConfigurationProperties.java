@@ -14,21 +14,19 @@
  * limitations under the License.
  */
 
-package com.iqkv.foundation.audit.model.enums;
+package com.iqkv.foundation.tenancy;
 
-/**
- * Defines standard activity actions for auditing.
- */
-public enum ActivityAction {
-  CREATE,
-  UPDATE,
-  DELETE,
-  LOGIN,
-  LOGOUT,
-  VIEW,
-  EXPORT,
-  DOWNLOAD,
-  UPLOAD,
-  PASSWORD_CHANGE,
-  PASSWORD_RESET
-}
+import jakarta.validation.constraints.NotBlank;
+import java.util.List;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
+
+/** Liquibase configuration properties for tenant-aware schema migrations. */
+@Validated
+@ConfigurationProperties(prefix = "iqkv.liquibase")
+public record LiquibaseConfigurationProperties(
+    @NotBlank String systemChangeLog,
+    @NotBlank String tenantChangeLog,
+    String contexts,
+    List<String> demoTenants) {}

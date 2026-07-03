@@ -1,16 +1,6 @@
-# Foundation Audit Model 📋
+# Foundation Tenancy 📋
 
-Shared domain model for the IQKV platform's audit logging system. Provides neutral, implementation-independent data structures, events, and enums used for consistent activity tracking across all microservices.
-
-## About
-
-The Audit Model library is the "common language" for compliance and activity tracking:
-
-- **Neutral Event Schema** — defines the canonical `AuditEvent` structure used by both publishers (IAM, Billing) and consumers (Audit Service).
-- **Actor Context** — structured models for capturing who performed an action (user ID, IP address, user agent).
-- **Activity Vocabulary** — shared enums for `ActivityAction` and `EntityType` to ensure consistent logging across different domain services.
-- **Resource Records** — persistent log entry models designed for various backends (PostgreSQL, Elasticsearch).
-- **Zero Dependencies** — kept lightweight with minimal external dependencies to ensure easy integration into any platform service.
+Shared tenancy components for IQKV microservices, including tenant context management, MyBatis schema interception, and Liquibase migration runner.
 
 ## Quick Links
 
@@ -18,12 +8,65 @@ The Audit Model library is the "common language" for compliance and activity tra
 - [Architecture Overview](./docs/architecture/README.md)
 - [Contributing Guidelines](.github/CONTRIBUTING.md)
 
-## Tech Stack
+## Key Components
 
-- Java 25
-- Jackson for serialization
-- Lombok (optional, for boilerplate reduction)
-- Maven 3.9+
+### TenantContext
+
+ThreadLocal holder for current tenant key, with type-safe tenant key management.
+
+```java
+// Set current tenant
+TenantContext.setCurrentTenant("tenant123");
+
+// Get current tenant
+String tenant = TenantContext.getCurrentTenant();
+
+// Clear (must call to prevent memory leaks)
+TenantContext.clear();
+```
+
+### MyBatisSchemaInterceptor
+
+MyBatis Interceptor that automatically sets PostgreSQL `search_path` to the tenant schema (`t_<tenantKey>, public`) for each database operation when tenant context is active.
+
+### TenantLiquibaseRunner
+
+Spring Boot ApplicationRunner that executes tenant-aware Liquibase migrations on startup, including:
+
+- System schema migrations (to `public`)
+- Tenant schema migrations (to `t_<tenantKey>`) for each demo tenant (if configured via `iqkv.liquibase.demoTenants`)
+
+### LiquibaseConfigurationProperties
+
+Spring Boot configuration properties for tenancy-related Liquibase settings:
+
+```yaml
+iqkv:
+    liquibase:
+        system-change-log: db/changelog/system/db.changelog-master.xml
+        tenant-change-log: db/changelog/tenant/master.xml
+        contexts: dev,prod
+        demo-tenants:
+            - tenant1
+            - tenant2
+        tenant-runner-enabled: true # default is true
+```
+
+## Usage
+
+### Maven Dependency
+
+```xml
+<dependency>
+  <groupId>com.iqkv</groupId>
+  <artifactId>foundation-tenancy</artifactId>
+  <version>0.24.0-SNAPSHOT</version>
+</dependency>
+```
+
+### Spring Boot Auto-Configuration
+
+When added as a dependency to a Spring Boot project, `TenantLiquibaseRunner` and `LiquibaseConfigurationProperties` are auto-configured if Liquibase is available on the classpath.
 
 ## Development
 

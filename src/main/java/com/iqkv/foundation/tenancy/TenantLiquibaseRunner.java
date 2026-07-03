@@ -31,16 +31,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 /** Application runner that executes tenant-aware Liquibase migrations on startup. */
-@Component
-@ConditionalOnProperty(
-    name = "iqkv.liquibase.tenant-runner-enabled",
-    havingValue = "true",
-    matchIfMissing = true)
 public class TenantLiquibaseRunner implements ApplicationRunner {
 
   private static final Logger log = LoggerFactory.getLogger(TenantLiquibaseRunner.class);

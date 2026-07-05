@@ -18,6 +18,8 @@ package com.iqkv.foundation.tenancy;
 
 import java.sql.Connection;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
 import javax.sql.DataSource;
 
 import liquibase.Contexts;
@@ -33,26 +35,73 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.util.StringUtils;
 
-/** Application runner that executes tenant-aware Liquibase migrations on startup. */
+/**
+ * Application runner that executes tenant-aware Liquibase migrations on startup.
+ *
+ * <p>Startup sequence:
+ * <ol>
+ *   <li>Migrate the {@code public} (system) schema.</li>
+ *   <li>If {@link LiquibaseConfigurationProperties#upgradeExistingTenants()} is {@code true},
+ *       iterate all tenant keys returned by the registered {@link TenantKeyProvider} and apply
+ *       any pending changesets to each tenant schema. Per-tenant failures are logged and skipped
+ *       so that one bad schema does not abort the entire startup.</li>
+ *   <li>Migrate any additional demo/seed tenants listed in
+ *       {@link LiquibaseConfigurationProperties#demoTenants()}. This step is idempotent — demo
+ *       tenants already covered by the provider scan are silently no-ops.</li>
+ * </ol>
+ */
 public class TenantLiquibaseRunner implements ApplicationRunner {
 
   private static final Logger log = LoggerFactory.getLogger(TenantLiquibaseRunner.class);
 
   private final DataSource dataSource;
   private final LiquibaseConfigurationProperties liquibaseProps;
+  private final TenantKeyProvider tenantKeyProvider;
 
   public TenantLiquibaseRunner(
-      final DataSource dataSource, final LiquibaseConfigurationProperties liquibaseProps) {
+      final DataSource dataSource,
+      final LiquibaseConfigurationProperties liquibaseProps,
+      final TenantKeyProvider tenantKeyProvider) {
     this.dataSource = dataSource;
     this.liquibaseProps = liquibaseProps;
+    this.tenantKeyProvider = tenantKeyProvider;
   }
 
   @Override
   public void run(final ApplicationArguments args) throws Exception {
+    // Step 1 — system schema
     log.info("Running system schema migrations");
     runMigrations("public", liquibaseProps.systemChangeLog());
     log.info("System schema migrations complete");
 
+    // Step 2 — upgrade existing tenant schemas
+    if (liquibaseProps.upgradeExistingTenants()) {
+      final List<String> tenantKeys = tenantKeyProvider.findAllTenantKeys();
+      if (!tenantKeys.isEmpty()) {
+        log.info("Upgrading existing tenant schemas: {} tenant(s) found", tenantKeys.size());
+        final List<String> failed = new ArrayList<>();
+        for (final String tenantKey : tenantKeys) {
+          try {
+            runMigrationsForTenant(tenantKey);
+          } catch (final Exception e) {
+            log.error("Failed to upgrade schema for tenant '{}', skipping", tenantKey, e);
+            failed.add(tenantKey);
+          }
+        }
+        if (!failed.isEmpty()) {
+          log.warn("Schema upgrade failed for {}/{} tenant(s): {}",
+              failed.size(), tenantKeys.size(), failed);
+        } else {
+          log.info("All existing tenant schema upgrades complete");
+        }
+      } else {
+        log.debug("No existing tenant keys returned by TenantKeyProvider — skipping upgrade scan");
+      }
+    } else {
+      log.info("Existing tenant schema upgrade scan disabled (iqkv.liquibase.upgrade-existing-tenants=false)");
+    }
+
+    // Step 3 — demo / seed tenants (idempotent)
     if (liquibaseProps.demoTenants() != null && !liquibaseProps.demoTenants().isEmpty()) {
       log.info("Running tenant schema migrations for demo tenants: {}", liquibaseProps.demoTenants());
       for (final String tenantKey : liquibaseProps.demoTenants()) {
@@ -62,6 +111,14 @@ public class TenantLiquibaseRunner implements ApplicationRunner {
     }
   }
 
+  /**
+   * Creates the tenant schema if absent and applies all pending Liquibase changesets.
+   * Safe to call repeatedly — Liquibase tracks applied changesets in each schema's
+   * {@code DATABASECHANGELOG} table and skips already-applied entries.
+   *
+   * @param tenantKey the tenant key (schema will be {@code t_{tenantKey}})
+   * @throws Exception if Liquibase fails to apply a changeset
+   */
   public void runMigrationsForTenant(final String tenantKey) throws Exception {
     final String schema = "t_" + tenantKey;
     log.info("Running tenant schema migrations for schema: {}", schema);
@@ -88,8 +145,7 @@ public class TenantLiquibaseRunner implements ApplicationRunner {
               : new Contexts();
 
       try (final Liquibase liquibase =
-          new Liquibase(
-              changelogPath, new ClassLoaderResourceAccessor(), database)) {
+          new Liquibase(changelogPath, new ClassLoaderResourceAccessor(), database)) {
         liquibase.update(contexts, new LabelExpression());
       }
     }

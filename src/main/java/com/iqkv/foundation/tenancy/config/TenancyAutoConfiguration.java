@@ -16,9 +16,11 @@
 
 package com.iqkv.foundation.tenancy.config;
 
+import java.util.Collections;
 import javax.sql.DataSource;
 
 import com.iqkv.foundation.tenancy.LiquibaseConfigurationProperties;
+import com.iqkv.foundation.tenancy.TenantKeyProvider;
 import com.iqkv.foundation.tenancy.TenantLiquibaseRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -33,6 +35,28 @@ import org.springframework.context.annotation.Configuration;
 @EnableConfigurationProperties(LiquibaseConfigurationProperties.class)
 public class TenancyAutoConfiguration {
 
+  /**
+   * No-op {@link TenantKeyProvider} registered when no service-specific implementation is present.
+   * Returns an empty list, which causes {@link TenantLiquibaseRunner} to skip the upgrade scan
+   * while still running system and demo-tenant migrations.
+   */
+  @Bean
+  @ConditionalOnMissingBean(TenantKeyProvider.class)
+  public TenantKeyProvider noOpTenantKeyProvider() {
+    return Collections::emptyList;
+  }
+
+  /**
+   * Registers the {@link TenantLiquibaseRunner} when:
+   * <ul>
+   *   <li>Liquibase is on the classpath</li>
+   *   <li>A {@link DataSource} bean is available</li>
+   *   <li>{@code iqkv.liquibase.tenant-runner-enabled=true}</li>
+   *   <li>No other {@link TenantLiquibaseRunner} bean is already defined</li>
+   * </ul>
+   * The runner receives the {@link TenantKeyProvider} bean (either the service-specific
+   * implementation or the no-op fallback above).
+   */
   @Bean
   @ConditionalOnClass(name = "liquibase.Liquibase")
   @ConditionalOnBean(DataSource.class)
@@ -40,9 +64,11 @@ public class TenancyAutoConfiguration {
       name = "iqkv.liquibase.tenant-runner-enabled",
       havingValue = "true",
       matchIfMissing = false)
-  @ConditionalOnMissingBean
+  @ConditionalOnMissingBean(TenantLiquibaseRunner.class)
   public TenantLiquibaseRunner tenantLiquibaseRunner(
-      final DataSource dataSource, final LiquibaseConfigurationProperties liquibaseProps) {
-    return new TenantLiquibaseRunner(dataSource, liquibaseProps);
+      final DataSource dataSource,
+      final LiquibaseConfigurationProperties liquibaseProps,
+      final TenantKeyProvider tenantKeyProvider) {
+    return new TenantLiquibaseRunner(dataSource, liquibaseProps, tenantKeyProvider);
   }
 }

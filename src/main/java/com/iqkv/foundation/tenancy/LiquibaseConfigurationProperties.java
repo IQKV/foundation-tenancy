@@ -20,6 +20,7 @@ import jakarta.validation.constraints.NotBlank;
 import java.util.List;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.validation.annotation.Validated;
 
 /** Liquibase configuration properties for tenant-aware schema migrations. */
@@ -29,4 +30,15 @@ public record LiquibaseConfigurationProperties(
     @NotBlank String systemChangeLog,
     @NotBlank String tenantChangeLog,
     String contexts,
-    List<String> demoTenants) {}
+    List<String> demoTenants,
+
+    /**
+     * When {@code true} (the default), {@link TenantLiquibaseRunner} iterates all tenant keys
+     * returned by the registered {@link TenantKeyProvider} on startup and applies any pending
+     * Liquibase changesets to each tenant schema.
+     *
+     * <p>Set to {@code false} to disable the automatic upgrade scan — useful when migrations are
+     * managed out-of-band (e.g. a dedicated migration job) or during initial bootstrap before
+     * any tenant schemas exist.
+     */
+    @DefaultValue("true") boolean upgradeExistingTenants) {}

@@ -23,7 +23,6 @@ import com.iqkv.foundation.tenancy.LiquibaseConfigurationProperties;
 import com.iqkv.foundation.tenancy.TenantKeyProvider;
 import com.iqkv.foundation.tenancy.TenantLiquibaseRunner;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -59,7 +58,6 @@ public class TenancyAutoConfiguration {
    */
   @Bean
   @ConditionalOnClass(name = "liquibase.Liquibase")
-  @ConditionalOnBean(DataSource.class)
   @ConditionalOnProperty(
       name = "iqkv.liquibase.tenant-runner-enabled",
       havingValue = "true",

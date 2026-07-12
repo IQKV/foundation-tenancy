@@ -40,4 +40,5 @@ public record LiquibaseConfigurationProperties(
     @NotBlank String tenantChangeLog,
     String contexts,
     List<String> bootstrapTenants,
-    @DefaultValue("true") boolean upgradeExistingTenants) {}
+    @DefaultValue("true") boolean upgradeExistingTenants) {
+}

@@ -29,7 +29,9 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 
-/** Auto-configuration for tenancy components. */
+/**
+ * Auto-configuration for tenancy components.
+ */
 @AutoConfiguration(afterName = "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration")
 @EnableConfigurationProperties(LiquibaseConfigurationProperties.class)
 public class TenancyAutoConfiguration {

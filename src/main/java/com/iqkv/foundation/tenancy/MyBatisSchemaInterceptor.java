@@ -34,10 +34,10 @@ import org.slf4j.LoggerFactory;
  * leaving the default public schema in effect.
  */
 @Intercepts({
-  @Signature(
-      type = StatementHandler.class,
-      method = "prepare",
-      args = {Connection.class, Integer.class})
+    @Signature(
+        type = StatementHandler.class,
+        method = "prepare",
+        args = {Connection.class, Integer.class})
 })
 public class MyBatisSchemaInterceptor implements Interceptor {
 
@@ -55,7 +55,7 @@ public class MyBatisSchemaInterceptor implements Interceptor {
       }
       final String schema = "t_" + tenantKey;
       try (final var stmt =
-          connection.prepareStatement("SET search_path TO " + schema + ", public")) {
+               connection.prepareStatement("SET search_path TO " + schema + ", public")) {
         stmt.execute();
       }
       log.trace("search_path set to {}, public", schema);

@@ -16,8 +16,6 @@
 
 package com.iqkv.foundation.tenancy;
 
-private static final String PLATFORM_TENANT_KEY = "platform";
-
 import java.sql.Connection;
 import java.sql.Statement;
 import java.util.ArrayList;
@@ -53,6 +51,8 @@ import org.springframework.util.StringUtils;
  * </ol>
  */
 public class TenantLiquibaseRunner implements ApplicationRunner {
+
+  private static final String PLATFORM_TENANT_KEY = "platform";
 
   private static final Logger log = LoggerFactory.getLogger(TenantLiquibaseRunner.class);
 

@@ -39,5 +39,5 @@ public record LiquibaseConfigurationProperties(
     @NotBlank String systemChangeLog,
     @NotBlank String tenantChangeLog,
     String contexts,
-    List<String> demoTenants,
+    List<String> bootstrapTenants,
     @DefaultValue("true") boolean upgradeExistingTenants) {}

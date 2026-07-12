@@ -34,7 +34,7 @@ MyBatis Interceptor that automatically sets PostgreSQL `search_path` to the tena
 Spring Boot ApplicationRunner that executes tenant-aware Liquibase migrations on startup, including:
 
 - System schema migrations (to `public`)
-- Tenant schema migrations (to `t_<tenantKey>`) for each demo tenant (if configured via `iqkv.liquibase.demoTenants`)
+- Tenant schema migrations (to `t_<tenantKey>`) for each pre-provisioned tenant (if configured via `iqkv.liquibase.bootstrap-tenants`)
 
 ### LiquibaseConfigurationProperties
 
@@ -46,7 +46,7 @@ iqkv:
         system-change-log: db/changelog/system/db.changelog-master.xml
         tenant-change-log: db/changelog/tenant/master.xml
         contexts: dev,prod
-        demo-tenants:
+        bootstrap-tenants:
             - tenant1
             - tenant2
         tenant-runner-enabled: true # default is true

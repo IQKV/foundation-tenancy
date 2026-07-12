@@ -16,6 +16,8 @@
 
 package com.iqkv.foundation.tenancy;
 
+private static final String PLATFORM_TENANT_KEY = "platform";
+
 import java.sql.Connection;
 import java.sql.Statement;
 import java.util.ArrayList;
@@ -45,8 +47,8 @@ import org.springframework.util.StringUtils;
  *       iterate all tenant keys returned by the registered {@link TenantKeyProvider} and apply
  *       any pending changesets to each tenant schema. Per-tenant failures are logged and skipped
  *       so that one bad schema does not abort the entire startup.</li>
- *   <li>Migrate any additional demo/seed tenants listed in
- *       {@link LiquibaseConfigurationProperties#demoTenants()}. This step is idempotent — demo
+ *   <li>Migrate any additional seed tenants listed in
+ *       {@link LiquibaseConfigurationProperties#bootstrapTenants()}. This step is idempotent — bootstrap
  *       tenants already covered by the provider scan are silently no-ops.</li>
  * </ol>
  */
@@ -101,14 +103,18 @@ public class TenantLiquibaseRunner implements ApplicationRunner {
       log.info("Existing tenant schema upgrade scan disabled (iqkv.liquibase.upgrade-existing-tenants=false)");
     }
 
-    // Step 3 — demo / seed tenants (idempotent)
-    if (liquibaseProps.demoTenants() != null && !liquibaseProps.demoTenants().isEmpty()) {
-      log.info("Running tenant schema migrations for demo tenants: {}", liquibaseProps.demoTenants());
-      for (final String tenantKey : liquibaseProps.demoTenants()) {
+    // Step 3 — seed, bootstrap tenants (idempotent)
+    if (liquibaseProps.bootstrapTenants() != null && !liquibaseProps.bootstrapTenants().isEmpty()) {
+      log.info("Running tenant schema migrations for pre-provisioned tenants: {}", liquibaseProps.bootstrapTenants());
+      for (final String tenantKey : liquibaseProps.bootstrapTenants()) {
         runMigrationsForTenant(tenantKey);
       }
-      log.info("Demo tenant schema migrations complete");
+      log.info("Bootstrap (pre-provisioned) tenant schema migrations complete");
     }
+
+    // Step 4 - The platform tenant (hardcoded key "platform") is used as a "landing zone" for every new user
+    // before they create an org. This design is fine but we should make sure the platform tenant's schema is seeded at bootstrap.
+    runMigrationsForTenant(PLATFORM_TENANT_KEY);
   }
 
   /**
@@ -145,7 +151,7 @@ public class TenantLiquibaseRunner implements ApplicationRunner {
               : new Contexts();
 
       try (final Liquibase liquibase =
-          new Liquibase(changelogPath, new ClassLoaderResourceAccessor(), database)) {
+               new Liquibase(changelogPath, new ClassLoaderResourceAccessor(), database)) {
         liquibase.update(contexts, new LabelExpression());
       }
     }

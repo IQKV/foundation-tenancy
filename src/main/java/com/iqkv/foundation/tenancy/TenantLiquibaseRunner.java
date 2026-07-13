@@ -153,6 +153,14 @@ public class TenantLiquibaseRunner implements ApplicationRunner {
       try (final Liquibase liquibase =
                new Liquibase(changelogPath, new ClassLoaderResourceAccessor(), database)) {
         liquibase.update(contexts, new LabelExpression());
+      } finally {
+        // Reset search_path to public before returning the connection to the pool.
+        // HikariCP does not reset session-level settings on connection return, so without
+        // this a pooled connection that served a tenant migration could be handed to a
+        // MyBatis query expecting the public schema and hit the wrong (or missing) tables.
+        try (final Statement reset = connection.createStatement()) {
+          reset.execute("SET search_path TO public");
+        }
       }
     }
   }

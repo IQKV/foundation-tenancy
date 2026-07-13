@@ -9,7 +9,7 @@
     </parent>
     <groupId>com.iqkv</groupId>
     <artifactId>foundation-tenancy</artifactId>
-    <version>0.24.7-SNAPSHOT</version>
+    <version>0.24.8-SNAPSHOT</version>
     <name>Foundation Tenacy Model</name>
     <description>Shared neutral data models and enums for tenancy.</description>
     <url>https://github.com/IQKV/foundation-tenancy</url>

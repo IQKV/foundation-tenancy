@@ -133,15 +133,27 @@ public class TenantLiquibaseRunner implements ApplicationRunner {
   }
 
   private void runMigrations(final String schema, final String changelogPath) throws Exception {
-    try (final Connection connection = dataSource.getConnection()) {
-      try (final Statement stmt = connection.createStatement()) {
-        stmt.execute("CREATE SCHEMA IF NOT EXISTS " + schema);
+    // Use a dedicated connection for schema creation only. Liquibase gets its own
+    // separate connection (via the second getConnection() call) which it is free to
+    // close when the Liquibase try-with-resources block exits. This avoids the
+    // "Connection is closed" error that occurs when the finally-reset block tries
+    // to reuse a connection that Liquibase has already closed.
+    try (final Connection schemaConnection = dataSource.getConnection();
+         final Statement stmt = schemaConnection.createStatement()) {
+      stmt.execute("CREATE SCHEMA IF NOT EXISTS " + schema);
+    }
+
+    try (final Connection liquibaseConnection = dataSource.getConnection()) {
+      // Set search_path so Liquibase resolves unqualified table references to the
+      // correct schema. Liquibase will close this connection on exit; we do not
+      // touch it afterwards.
+      try (final Statement stmt = liquibaseConnection.createStatement()) {
         stmt.execute("SET search_path TO " + schema);
       }
 
       final Database database =
           DatabaseFactory.getInstance()
-              .findCorrectDatabaseImplementation(new JdbcConnection(connection));
+              .findCorrectDatabaseImplementation(new JdbcConnection(liquibaseConnection));
       database.setDefaultSchemaName(schema);
       database.setLiquibaseSchemaName(schema);
 
@@ -153,15 +165,10 @@ public class TenantLiquibaseRunner implements ApplicationRunner {
       try (final Liquibase liquibase =
                new Liquibase(changelogPath, new ClassLoaderResourceAccessor(), database)) {
         liquibase.update(contexts, new LabelExpression());
-      } finally {
-        // Reset search_path to public before returning the connection to the pool.
-        // HikariCP does not reset session-level settings on connection return, so without
-        // this a pooled connection that served a tenant migration could be handed to a
-        // MyBatis query expecting the public schema and hit the wrong (or missing) tables.
-        try (final Statement reset = connection.createStatement()) {
-          reset.execute("SET search_path TO public");
-        }
       }
+      // Liquibase.close() closes the Database which closes liquibaseConnection.
+      // HikariCP evicts closed connections from the pool automatically, so no
+      // explicit search_path reset is needed — the connection is gone, not recycled.
     }
   }
 }

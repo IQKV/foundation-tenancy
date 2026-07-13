@@ -28,6 +28,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.core.annotation.Order;
 
 /**
  * Auto-configuration for tenancy components.
@@ -59,6 +60,7 @@ public class TenancyAutoConfiguration {
    * implementation or the no-op fallback above).
    */
   @Bean
+  @Order(1)
   @ConditionalOnClass(name = "liquibase.Liquibase")
   @ConditionalOnProperty(
       name = "iqkv.liquibase.tenant-runner-enabled",

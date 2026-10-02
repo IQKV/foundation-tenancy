@@ -71,6 +71,38 @@ project-root/
 - **Infrastructure**: Technical concerns (config, security, persistence framework)
 - **Shared Kernel**: Common code shared across bounded contexts
 
+## Execution Discipline
+
+- Root cause first. Fix the real entry point, not a bypass around it.
+- Read complete affected modules, callers, and tests before editing.
+- After two identical failures without new evidence, change approach — do not retry blindly.
+- Check relevant prerequisites early (`./mvnw verify`). Parallelize independent work.
+- Behavior proven and required gates green: finish. No speculative scope growth.
+
+## Security
+
+- Keep credentials, tokens, and private config out of commits, logs, and shared text.
+- Flag files likely to contain secrets (`.env`, `application-local.yml`) before staging.
+- `TenantContext` carries the active tenant key — never log it at DEBUG level or include it in exception messages sent to clients.
+- Use exact or pinned dependency versions. Flag unusual package names before installing.
+- Never bypass `--no-verify` unless explicitly requested.
+
+## Commit Standards
+
+Format: `type(scope): subject`
+
+- Subject: imperative, lowercase, no trailing period, ≤ 72 chars
+- Types: `feat`, `fix`, `improvement`, `refactor`, `docs`, `test`, `chore`, `ci`, `perf`, `revert`
+- Scope: affected area (e.g., `tenant-context`, `schema-interceptor`, `liquibase`, `auto-config`, `deps`)
+- For `fix`: describe the symptom and trigger, not the code change
+  - ✅ `fix(schema-interceptor): tenant schema not restored after exception in transaction`
+  - ❌ `fix(schema-interceptor): add finally block`
+
+Examples:
+- `feat(tenant-context): add isPersonalWorkspace flag to tenant context`
+- `fix(liquibase-runner): migration fails when tenant schema already exists`
+- `chore(deps): update spring-boot to 4.1.1`
+
 ## 🤖 AI Agent Guidelines
 
 ### AI Communication Standards

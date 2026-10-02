@@ -95,10 +95,11 @@ Format: `type(scope): subject`
 - Types: `feat`, `fix`, `improvement`, `refactor`, `docs`, `test`, `chore`, `ci`, `perf`, `revert`
 - Scope: affected area (e.g., `tenant-context`, `schema-interceptor`, `liquibase`, `auto-config`, `deps`)
 - For `fix`: describe the symptom and trigger, not the code change
-  - ✅ `fix(schema-interceptor): tenant schema not restored after exception in transaction`
-  - ❌ `fix(schema-interceptor): add finally block`
+    - ✅ `fix(schema-interceptor): tenant schema not restored after exception in transaction`
+    - ❌ `fix(schema-interceptor): add finally block`
 
 Examples:
+
 - `feat(tenant-context): add isPersonalWorkspace flag to tenant context`
 - `fix(liquibase-runner): migration fails when tenant schema already exists`
 - `chore(deps): update spring-boot to 4.1.1`

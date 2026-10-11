@@ -4,148 +4,142 @@ on:
   release:
     types: [created]
 
+env:
+  MAVEN_ARGS: -B -V --no-transfer-progress
+
 jobs:
   publish:
     name: "Publish to Maven Central"
     runs-on: ubuntu-latest
-    # CRITICAL SECURITY CHECK: Only run if the release was created from the maven-central branch
-    # This prevents accidental publishing from feature branches or pull requests
     if: github.event.release.target_commitish == 'maven-central'
 
     steps:
-      # Get the source code from the repository
       - name: "Checkout Repository"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
-          fetch-depth: 0 # Fetch full history for proper versioning
+          fetch-depth: 0
 
-      # Set up Java 25 with Maven Central publishing configuration
-      # This configures GPG signing and OSSRH server credentials
       - name: "Set up JDK 25"
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: "25"
-          distribution: "temurin"
-          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }} # GPG key for artifact signing
-          gpg-passphrase: MAVEN_GPG_PASSPHRASE # Environment variable for GPG passphrase
+          distribution: "corretto"
+          cache: maven
+          server-id: central
+          server-username: CENTRAL_TOKEN_USERNAME
+          server-password: CENTRAL_TOKEN_PASSWORD
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          gpg-passphrase: MAVEN_GPG_PASSPHRASE
 
-      # Cache Maven dependencies to speed up builds
-      - name: "Cache Maven Dependencies"
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2
-          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: ${{ runner.os }}-m2
-
-      - name: Configure Maven Settings
-        run: |
-          mkdir -p ~/.m2
-          cat > ~/.m2/settings.xml <<EOF
-          <settings>
-            <servers>
-              <server>
-                <id>central</id>
-                <username>\${env.MAVEN_USERNAME}</username>
-                <password>\${env.MAVEN_PASSWORD}</password>
-              </server>
-            </servers>
-          </settings>
-          EOF
-        env:
-          MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
-          MAVEN_PASSWORD: ${{ secrets.OSSRH_TOKEN }}
-
-      # Configure Git for potential version commits
       - name: "Configure Git User"
         run: |
           git config --global user.email "action@github.com"
           git config --global user.name "GitHub Action"
 
-      # Extract version from POM and convert SNAPSHOT to release version
-      # This handles the automatic conversion from development to release version
       - name: "Extract and Prepare Release Version"
         id: extract_version
+        env:
+          MAVEN_ARGS: -B -q --no-transfer-progress
         run: |
-          # Get the current version from the POM file
-          CURRENT_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
-          if [[ -z "$CURRENT_VERSION" ]]; then
-            echo "Error: Could not extract version from POM"
-            exit 1
-          fi
-
+          CURRENT_VERSION=$(mvn help:evaluate -Dexpression=project.version -DforceStdout | tail -n1)
+          if [[ -z "$CURRENT_VERSION" ]]; then echo "Error: Could not extract version from POM"; exit 1; fi
           echo "Current POM version: $CURRENT_VERSION"
-
-          # Convert SNAPSHOT to release version by removing the -SNAPSHOT suffix
-          # Example: 1.0.0-SNAPSHOT becomes 1.0.0
           if [[ "$CURRENT_VERSION" == *"-SNAPSHOT" ]]; then
             RELEASE_VERSION=${CURRENT_VERSION%-SNAPSHOT}
-            echo "Converting SNAPSHOT version to release version"
-            echo "SNAPSHOT: $CURRENT_VERSION -> Release: $RELEASE_VERSION"
           else
-            # If it's already a release version, use it as-is
             RELEASE_VERSION="$CURRENT_VERSION"
-            echo "Using existing release version: $RELEASE_VERSION"
           fi
-
-          # Export versions for use in subsequent steps
           echo "VERSION=$RELEASE_VERSION" >> $GITHUB_OUTPUT
           echo "ORIGINAL_VERSION=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          echo "Final release version: $RELEASE_VERSION"
 
-      # Validate the release version format
-      # Ensures the version follows semantic versioning conventions
       - name: "Validate Release Version"
         run: |
           VERSION="${{ steps.extract_version.outputs.VERSION }}"
-          ORIGINAL_VERSION="${{ steps.extract_version.outputs.ORIGINAL_VERSION }}"
-
-          echo "Original version: $ORIGINAL_VERSION"
-          echo "Release version: $VERSION"
-
-          # Basic semantic version validation (X.Y.Z or X.Y.Z-suffix)
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-.*)?$ ]]; then
             echo "Warning: Version '$VERSION' doesn't follow semantic versioning format"
-            echo "Expected format: X.Y.Z or X.Y.Z-suffix"
           fi
-
           echo "✅ Release version validated: $VERSION"
 
-      # Update POM to use the release version
-      # This temporarily modifies the POM for the build process
       - name: "Update POM to Release Version"
         run: |
           VERSION="${{ steps.extract_version.outputs.VERSION }}"
           ORIGINAL_VERSION="${{ steps.extract_version.outputs.ORIGINAL_VERSION }}"
-
-          # Only update if the version changed (SNAPSHOT -> release)
           if [[ "$ORIGINAL_VERSION" != "$VERSION" ]]; then
-            echo "Updating POM version from $ORIGINAL_VERSION to $VERSION"
-            mvn versions:set -DnewVersion="$VERSION" -DgenerateBackupPoms=false
-            
-            # Verify the version was set correctly
-            NEW_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
-            echo "POM version updated to: $NEW_VERSION"
-            
+            mvn ${MAVEN_ARGS} versions:set -DnewVersion="$VERSION" -DgenerateBackupPoms=false
+            NEW_VERSION=$(mvn -B -q --no-transfer-progress help:evaluate -Dexpression=project.version -DforceStdout | tail -n1)
             if [[ "$NEW_VERSION" != "$VERSION" ]]; then
-              echo "Error: Version update failed. Expected: $VERSION, Got: $NEW_VERSION"
-              exit 1
+              echo "Error: Version update failed. Expected: $VERSION, Got: $NEW_VERSION"; exit 1
             fi
+            echo "POM version updated to: $NEW_VERSION"
           else
             echo "POM already has release version: $VERSION"
           fi
 
-      # Build and verify the project
-      # Ensures everything compiles and tests pass before publishing
-      - name: "Verify Build"
-        run: mvn clean verify
-
-      # Step 9: Deploy to OSSRH (Maven Central)
-      # Uses the 'maven-central' profile which includes sources, javadoc, and GPG signing
-      - name: "Deploy to OSSRH"
-        run: mvn clean deploy -P maven-central -Dgpg.passphrase="${{ secrets.GPG_PASSPHRASE }}"
+      - name: "Sign artifacts"
         env:
-          # OSSRH credentials from GitHub secrets
-          MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
-          MAVEN_PASSWORD: ${{ secrets.OSSRH_TOKEN }}
-          # GPG signing passphrase from GitHub secrets
           MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: mvn ${MAVEN_ARGS} clean verify -P maven-central -Dmaven.install.skip=true
+
+      - name: "Build and upload bundle manually"
+        env:
+          CENTRAL_TOKEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
+          CENTRAL_TOKEN_PASSWORD: ${{ secrets.OSSRH_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.extract_version.outputs.VERSION }}"
+          GROUP_PATH="com/iqkv/foundation-tenancy"
+          ARTIFACT="foundation-tenancy"
+          STAGING="target/manual-staging/${GROUP_PATH}/${VERSION}"
+          mkdir -p "${STAGING}"
+
+          for EXT in pom jar; do
+            cp "$([ "$EXT" = "pom" ] && echo pom.xml || echo target/${ARTIFACT}-${VERSION}.${EXT})" \
+               "${STAGING}/${ARTIFACT}-${VERSION}.${EXT}"
+            cp "target/${ARTIFACT}-${VERSION}.${EXT}.asc" "${STAGING}/${ARTIFACT}-${VERSION}.${EXT}.asc"
+            for ALGO in md5 sha1 sha256 sha512; do
+              ${ALGO}sum "${STAGING}/${ARTIFACT}-${VERSION}.${EXT}" | awk '{print $1}' \
+                > "${STAGING}/${ARTIFACT}-${VERSION}.${EXT}.${ALGO}"
+            done
+          done
+
+          for CLASSIFIER in sources javadoc; do
+            cp "target/${ARTIFACT}-${VERSION}-${CLASSIFIER}.jar" \
+               "${STAGING}/${ARTIFACT}-${VERSION}-${CLASSIFIER}.jar"
+            cp "target/${ARTIFACT}-${VERSION}-${CLASSIFIER}.jar.asc" \
+               "${STAGING}/${ARTIFACT}-${VERSION}-${CLASSIFIER}.jar.asc"
+            for ALGO in md5 sha1 sha256 sha512; do
+              ${ALGO}sum "${STAGING}/${ARTIFACT}-${VERSION}-${CLASSIFIER}.jar" | awk '{print $1}' \
+                > "${STAGING}/${ARTIFACT}-${VERSION}-${CLASSIFIER}.jar.${ALGO}"
+            done
+          done
+
+          echo "Bundle contents:"; find "target/manual-staging" -type f | sort
+          cd target/manual-staging; zip -r "../central-bundle.zip" .; cd -
+          echo "Zip contents:"; unzip -l target/central-bundle.zip
+
+          RESPONSE=$(curl --silent --show-error --fail-with-body \
+            --request POST \
+            --header "Authorization: Bearer $(echo -n "${CENTRAL_TOKEN_USERNAME}:${CENTRAL_TOKEN_PASSWORD}" | base64 -w0)" \
+            --form "bundle=@target/central-bundle.zip" \
+            "https://central.sonatype.com/api/v1/publisher/upload?publishingType=AUTOMATIC")
+          echo "Upload response: ${RESPONSE}"
+          DEPLOYMENT_ID="${RESPONSE}"
+
+          for i in $(seq 1 60); do
+            sleep 30
+            BODY=$(curl --silent --fail \
+              --header "Authorization: Bearer $(echo -n "${CENTRAL_TOKEN_USERNAME}:${CENTRAL_TOKEN_PASSWORD}" | base64 -w0)" \
+              "https://central.sonatype.com/api/v1/publisher/status?id=${DEPLOYMENT_ID}" || true)
+            if [[ -z "${BODY}" ]]; then echo "Empty response — likely completed"; break; fi
+            STATUS=$(echo "${BODY}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('deploymentState','UNKNOWN'))" 2>/dev/null || echo "UNKNOWN")
+            echo "[$i/60] ${DEPLOYMENT_ID} state: ${STATUS}"
+            if [[ "${STATUS}" == "PUBLISHED" ]]; then echo "✅ Published"; exit 0; fi
+            if [[ "${STATUS}" == "FAILED" ]]; then echo "❌ Failed"; echo "${BODY}"; exit 1; fi
+          done
+
+          sleep 10
+          HTTP_CODE=$(curl --silent --output /dev/null --write-out "%{http_code}" \
+            "https://repo1.maven.org/maven2/${GROUP_PATH}/${VERSION}/${ARTIFACT}-${VERSION}.pom")
+          [[ "${HTTP_CODE}" == "200" ]] \
+            && echo "✅ Confirmed live on Maven Central" \
+            || echo "⚠️  Not yet visible (HTTP ${HTTP_CODE}) — check https://central.sonatype.com/publishing/deployments"
